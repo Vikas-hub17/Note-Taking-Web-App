@@ -1,23 +1,56 @@
-const Note = require('../models/Note');
+const Note = require("../models/Note");
 
 exports.createNote = async (req, res) => {
-  const { title, content } = req.body;
-  const newNote = new Note({ userId: req.userId, title, content });
-  await newNote.save();
-  res.json(newNote);
+  try {
+    console.log("Received Data:", req.body);
+    console.log("Authenticated User ID:", req.user.userId);  // Debugging
+
+    const { title, text, audioUrl, image } = req.body;
+
+    if (!title) {
+      return res.status(400).json({ message: "Title is required" });
+    }
+
+    const newNote = new Note({ userId: req.user.userId, title, text, audioUrl, image });
+    await newNote.save();
+
+    res.status(201).json(newNote);
+  } catch (error) {
+    console.error("Error saving note:", error);
+    res.status(500).json({ message: "Error saving note", error });
+  }
 };
 
+// Get User's Notes
 exports.getNotes = async (req, res) => {
-  const notes = await Note.find({ userId: req.userId }).sort({ createdAt: 1 });
-  res.json(notes);
+  try {
+    const notes = await Note.find({ userId: req.user.userId }).sort({ createdAt: -1 });
+    res.json(notes);
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching notes", error });
+  }
 };
 
+// Update Note
 exports.updateNote = async (req, res) => {
-  const updatedNote = await Note.findByIdAndUpdate(req.params.id, req.body, { new: true });
-  res.json(updatedNote);
+  try {
+    const note = await Note.findOneAndUpdate(
+      { _id: req.params.id, userId: req.user.userId },
+      req.body,
+      { new: true }
+    );
+    res.json(note);
+  } catch (error) {
+    res.status(500).json({ message: "Error updating note", error });
+  }
 };
 
+// Delete Note
 exports.deleteNote = async (req, res) => {
-  await Note.findByIdAndDelete(req.params.id);
-  res.json({ message: 'Note deleted' });
+  try {
+    await Note.findOneAndDelete({ _id: req.params.id, userId: req.user.userId });
+    res.json({ message: "Note deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ message: "Error deleting note", error });
+  }
 };
