@@ -17,6 +17,7 @@ const Dashboard = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [newNote, setNewNote] = useState({ title: "", content: "" });
   const [inputType, setInputType] = useState("");
+  const [isFavoriteView, setIsFavoriteView] = useState(false);
   
   const [notes, setNotes] = useState([
     {
@@ -37,6 +38,8 @@ const Dashboard = () => {
     },
   ]);
 
+  const [displayedNotes, setDisplayedNotes] = useState(notes);
+
   useEffect(() => {
     if (!isRecording && transcript) {
       // Show prompt for title input after recording stops
@@ -45,12 +48,36 @@ const Dashboard = () => {
         handleSaveNote(title, transcript);
       }
     }
-  }, [isRecording, transcript]); // Triggered when recording stops
+  }, [isRecording, transcript]);
+
+  useEffect(() => {
+    setDisplayedNotes(isFavoriteView ? notes.filter((note) => note.favorite) : notes);
+  }, [isFavoriteView, notes]);  
+  
+  const deleteNote = (noteId) => {
+    setNotes((prevNotes) => prevNotes.filter((note) => note.id !== noteId));
+  };
+  
+  const updateNote = (updatedNote) => {
+    setNotes((prevNotes) =>
+      prevNotes.map((note) => (note.id === updatedNote.id ? updatedNote : note))
+    );
+  };
 
   const openInputModal = (type) => {
+    setModalType(type);
     setInputType(type);
     setIsInputModalOpen(true);
   };
+
+ // Toggle favorite status of a note
+ const toggleFavorite = (noteId) => {
+  setNotes((prevNotes) =>
+    prevNotes.map((note) =>
+      note.id === noteId ? { ...note, favorite: !note.favorite } : note
+    )
+  );
+};
 
   const openNoteModal = (note) => {
     setSelectedNote(note);
@@ -62,32 +89,35 @@ const Dashboard = () => {
       alert("Please enter a title for your note.");
       return;
     }
-
-    const savedNote = {
-      title,
-      content,
+  
+    const newNoteObj = {
+      id: notes.length + 1,
+      type: modalType,
+      title: title,
+      text: content,
       timestamp: new Date().toLocaleString(),
+      duration: modalType === "audio" ? "00:00" : null,
     };
-
-    console.log("Saving Note:", savedNote);
+  
+    setNotes(prevNotes => [...prevNotes, newNoteObj]);
     setNewNote({ title: "", content: "" });
     setIsInputModalOpen(false);
+    console.log("Saving Note:", newNoteObj);
   };
 
-
-  return (
+return (
     <Container>
       {/* Sidebar */}
       <Sidebar>
         <Brand>AI Notes</Brand>
         <Menu>
-          <MenuItem active>
+          <MenuItem active={!isFavoriteView} onClick={() => setIsFavoriteView(false)}>
             <AiFillHome />
             Home
           </MenuItem>
-          <MenuItem>
+          <MenuItem active={isFavoriteView} onClick={() => setIsFavoriteView(true)}>
             <AiOutlineStar />
-            Favourites
+            Favorites
           </MenuItem>
         </Menu>
         <UserSection>
@@ -99,6 +129,7 @@ const Dashboard = () => {
       {/* Main Content */}
       <MainContent>
         <Header>
+        {isFavoriteView ? "Favorite Notes" : "All Notes"}
           <SearchBar>
             <FaSearch />
             <input type="text" placeholder="Search" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
@@ -110,11 +141,12 @@ const Dashboard = () => {
 
         {/* Notes Grid */}
         <NotesGrid>
-          {notes
-            .filter((note) =>
-              note.title.toLowerCase().includes(searchQuery.toLowerCase()) || note.text.toLowerCase().includes(searchQuery.toLowerCase())
-            )
-            .map((note) => (
+  {displayedNotes
+    .filter((note) =>
+      note.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      note.text.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+    .map((note) => (
               <NoteCard key={note.id} onClick={() => openNoteModal(note)}>
                 <NoteHeader>
                   <NoteTimestamp>{note.timestamp}</NoteTimestamp>
@@ -147,10 +179,10 @@ const Dashboard = () => {
             </FloatingIcon>
           </LeftIcons>
 
-          <RecordButton onClick={isRecording ? stopRecording : startRecording}>
-            {isRecording ? <BsMicMute /> : <BsMicFill />}
-            {isRecording ? "Stop Recording" : "Start Recording"}
-          </RecordButton>
+          <RecordButton onClick={() => openInputModal("audio")}>
+          {isRecording ? <BsMicMute /> : <BsMicFill />}
+          {isRecording ? "Stop Recording" : "Start Recording"}
+        </RecordButton>
         </FloatingBar>
 
         {/* Input Modal */}
@@ -159,18 +191,24 @@ const Dashboard = () => {
             isOpen={isInputModalOpen}
             onClose={() => setIsInputModalOpen(false)}
             inputType={modalType}
-            note={newNote}
-            setNote={setNewNote}
-            handleSaveNote={handleSaveNote}
+          transcript={transcript}
+          isRecording={isRecording}
+          startRecording={startRecording}
+          stopRecording={stopRecording}
+          newNote={newNote}
+          setNewNote={setNewNote}
           />
         )}
 
         {/* Note Modal */}
-        {isNoteModalOpen && (
+        {isNoteModalOpen && selectedNote && (
           <NoteModal
+          updateNote={updateNote}  // ✅ Pass update function
+          deleteNote={deleteNote}  // ✅ Pass delete function
             isOpen={isNoteModalOpen}
             onClose={() => setIsNoteModalOpen(false)}
             note={selectedNote}
+            toggleFavorite={toggleFavorite}  
           />
         )}
       </MainContent>

@@ -4,7 +4,7 @@ import {useSpeechRecognition} from "../hooks/useSpeechRecognition";
 import { FiX, FiMaximize2, FiStar, FiDownload, FiTrash2, FiSettings, FiEdit } from "react-icons/fi";
 import { BsShare, BsMic, BsMicMute, BsPlus } from "react-icons/bs";
 
-const NoteModal = ({ note, onClose, updateNote, deleteNote }) => {
+const NoteModal = ({ note, onClose, updateNote, deleteNote, toggleFavorite }) => {
   const [isFavorite, setIsFavorite] = useState(note.favorite || false);
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [editableNote, setEditableNote] = useState({ ...note });
@@ -20,32 +20,63 @@ const NoteModal = ({ note, onClose, updateNote, deleteNote }) => {
   };
 
   useEffect(() => {
+    if (!isRecording && transcript) {
+      setEditableNote((prev) => ({
+        ...prev,
+        transcription: prev.transcription ? prev.transcription + " " + transcript : transcript,
+      }));
+    }
+  }, [isRecording, transcript]);
+
+  useEffect(() => {
     if (transcript) {
       setEditableNote((prev) => ({ ...prev, transcription: transcript }));
     }
   }, [transcript]);
 
-  const handleSave = () => {
-    if (typeof updateNote === "function") {
-      updateNote(editableNote);
-    } else {
-      console.error("updateNote is not defined!");
-    }
-    onClose();  // Close modal after saving
+// Handle saving note updates
+const handleSave = () => {
+  if (!editableNote.title.trim()) {
+    alert("Title is required.");
+    return;
+  }
+  updateNote(editableNote);
+  setIsEditing(false);
+};
+
+// Handle image upload (allows multiple images)
+const handleImageUpload = (e) => {
+  const files = Array.from(e.target.files);
+  const newImages = files.map((file) => URL.createObjectURL(file));
+  setEditableNote((prev) => ({
+    ...prev,
+    images: [...(prev.images || []), ...newImages],
+  }));
+};
+
+  // Handle deleting a specific image
+  const handleImageRemove = (index) => {
+    setEditableNote((prev) => ({
+      ...prev,
+      images: prev.images.filter((_, i) => i !== index),
+    }));
   };
 
-  const handleImageUpload = (e) => {
-    if (e.target.files[0]) {
-      setEditableNote({ ...editableNote, image: URL.createObjectURL(e.target.files[0]) });
+  // Handle favorite toggle
+  const handleFavorite = () => {
+    setIsFavorite(!isFavorite);
+    toggleFavorite(note.id);  // ✅ Now using the function properly
+  };
+
+  // Handle delete note
+  const handleDelete = () => {
+    const confirmDelete = window.confirm("Are you sure you want to delete this note?");
+    if (confirmDelete) {
+      deleteNote(editableNote.id);  // ✅ Call delete function
+      onClose();
     }
   };
 
-  <NoteModal 
-  note={selectedNote} 
-  onClose={() => setIsModalOpen(false)}
-  updateNote={updateNote}  // ✅ Pass function here
-  deleteNote={deleteNote}
-/>
 
 {isNoteModalOpen && (
   <NoteModal 
@@ -54,6 +85,7 @@ const NoteModal = ({ note, onClose, updateNote, deleteNote }) => {
     onClose={() => setIsNoteModalOpen(false)}
     updateNote={updateNote}
     deleteNote={deleteNote}
+    toggleFavorite={toggleFavorite}
   />
 )}
 
@@ -69,16 +101,16 @@ const NoteModal = ({ note, onClose, updateNote, deleteNote }) => {
             <TitleInput 
               type="text" 
               value={editableNote.title} 
-              onChange={(e) => handleChange(e, "title")} 
+              onChange={(e) => setEditableNote({ ...editableNote, title: e.target.value })}
             />
           ) : (
             <Title>{editableNote.title}</Title>
           )}
           <Date>{editableNote.date}</Date>
           <HeaderRight>
-            <IconButton onClick={() => setIsFavorite(!isFavorite)}>
-              <FiStar color={isFavorite ? "#FFD700" : "#999"} />
-            </IconButton>
+          <IconButton onClick={handleFavorite}>
+            <FiStar color={isFavorite ? "#FFD700" : "#999"} />
+          </IconButton>
             <IconButton>
               <FiSettings />
             </IconButton>
@@ -86,7 +118,7 @@ const NoteModal = ({ note, onClose, updateNote, deleteNote }) => {
               <BsShare />
               Share
             </ShareButton>
-            <DeleteButton onClick={() => deleteNote(editableNote.id)}>
+            <DeleteButton onClick={handleDelete}>
               <FiTrash2 />
             </DeleteButton>
             <CloseButton onClick={onClose}>
@@ -132,17 +164,25 @@ const NoteModal = ({ note, onClose, updateNote, deleteNote }) => {
           </TranscriptSection>
         </Content>
 
-        {/* Image Upload Section */}
-        <ImageUploadSection>
-          {editableNote.image ? (
-            <UploadedImage src={editableNote.image} alt="Uploaded" />
-          ) : (
-            <ImageUploadBox>
+       {/* Image Upload Section */}
+       <ImageUploadSection>
+          <label htmlFor="imageUpload">
+            <UploadBox>
               <BsPlus />
-              <input type="file" accept="image/*" onChange={handleImageUpload} style={{ display: "none" }} />
-              Upload Image
-            </ImageUploadBox>
-          )}
+              Upload Images
+            </UploadBox>
+          </label>
+          <input id="imageUpload" type="file" accept="image/*" multiple onChange={handleImageUpload} hidden />
+
+          {/* Show Uploaded Images */}
+          <ImageGrid>
+            {editableNote.images?.map((image, index) => (
+              <ImageWrapper key={index}>
+                <UploadedImage src={image} alt="Uploaded" />
+                <RemoveImageButton onClick={() => handleImageRemove(index)}>✖</RemoveImageButton>
+              </ImageWrapper>
+            ))}
+          </ImageGrid>
         </ImageUploadSection>
 
         <RecordingSection>
@@ -179,6 +219,15 @@ const ModalOverlay = styled.div`
   display: flex;
   justify-content: center;
   align-items: center;
+`;
+
+const RemoveImageButton = styled.button`
+  margin-top: 8px;
+  background: #e74c3c;
+  color: white;
+  padding: 5px 10px;
+  border: none;
+  cursor: pointer;
 `;
 
 const ModalContainer = styled.div`
@@ -432,3 +481,25 @@ const EditButton = styled.button`
     background: #e0b00d;
   }
 `;
+
+const UploadBox = styled.div`
+  padding: 10px;
+  background: #f1f1f1;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+`;
+
+const ImageGrid = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+`;
+
+const ImageWrapper = styled.div`
+  position: relative;
+`;
+

@@ -1,8 +1,131 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import styled from "styled-components";
-import { BsMicFill } from "react-icons/bs";
-import { AiOutlinePicture, AiOutlineEdit } from "react-icons/ai";
+import { BsMicFill, BsMicMute } from "react-icons/bs";
+import { AiOutlineClose, AiOutlineCloudUpload  } from "react-icons/ai";
+import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
 
+const InputNoteModal = ({ isOpen, onClose, inputType, addNewNote, note }) => {
+  const { transcript, isRecording, startRecording, stopRecording } = useSpeechRecognition();
+  const [newNote, setNewNote] = useState({ title: "", text: "", audioUrl: "" });
+  const [editableNote, setEditableNote] = useState({ ...note });
+  const [isEditing, setIsEditing] = useState(false);
+
+  useEffect(() => {
+    if (!isRecording && transcript && inputType === "audio") {
+      setNewNote((prev) => ({ ...prev, content: transcript }));
+    }
+  }, [isRecording, transcript, inputType]);
+
+  useEffect(() => {
+      if (transcript) {
+        setEditableNote((prev) => ({ ...prev, transcription: transcript }));
+      }
+    }, [transcript]);
+
+  if (!isOpen) return null;
+
+  const handleTitleChange = (e) => setNewNote({ ...newNote, title: e.target.value });
+
+  const handleChange = (e, field) => {
+    setEditableNote({ ...editableNote, [field]: e.target.value });
+  };
+  
+  const handleContentChange = (e) => setNewNote({ ...newNote, content: e.target.value });
+
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setNewNote({ ...newNote, image: URL.createObjectURL(file) });
+    }
+  };
+
+  const handleSaveNote = async () => {
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      alert("You must be logged in to save a note.");
+      return;
+    }
+
+    if (!newNote.title.trim()) {
+      alert("Title is required.");
+      return;
+    }
+
+    try {
+      const response = await fetch("http://localhost:5000/api/notes", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(newNote),
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        addNewNote(data);
+        onClose();
+      } else {
+        alert(`Failed to save note: ${data.message}`);
+      }
+    } catch (error) {
+      console.error("Error saving note:", error);
+    }
+  };
+
+  return (
+    <ModalOverlay>
+      <ModalContent>
+        <CloseButton onClick={onClose}>
+          <AiOutlineClose />
+        </CloseButton>
+        {/* Title Input */}
+        <InputField type="text" placeholder="Enter title..." value={newNote.title} onChange={handleTitleChange} />
+
+        {/* Image Upload Modal */}
+        {inputType === "image" && (
+          <ImageUploadSection>
+            <label htmlFor="imageUpload">
+              <UploadIcon />
+              <span>Click to upload an image</span>
+            </label>
+            <input id="imageUpload" type="file" accept="image/*" onChange={handleImageUpload} hidden />
+            {newNote.image && <UploadedImage src={newNote.image} alt="Uploaded preview" />}
+          </ImageUploadSection>
+        )}
+
+        {/* Text Input Modal */}
+        {inputType === "text" && <TextArea placeholder="Write your note here..." value={newNote.content} onChange={handleContentChange} />}
+
+        {/* Audio Recording Modal */}
+        {inputType === "audio" && (
+          <>
+            {isEditing ? (
+              <TranscriptInput 
+                placeholder="Transcribe your audio here..."
+                value={editableNote.transcription} 
+                onChange={(e) => handleChange(e, "transcription")}
+              />
+            ) : (
+              <TranscriptText>{editableNote.transcription}</TranscriptText>
+            )}
+            <RecordButton onClick={isRecording ? stopRecording : startRecording} recording={isRecording}>
+              {isRecording ? "Stop Recording" : "Start Recording"} {isRecording ? <BsMicMute /> : <BsMicFill />}
+            </RecordButton>
+          </>
+        )}
+
+        {/* Save Button */}
+        <SaveButton onClick={handleSaveNote}>Save Note</SaveButton>
+      </ModalContent>
+    </ModalOverlay>
+  );
+};
+
+export default InputNoteModal;
+
+/* Styled Components */
 const ModalOverlay = styled.div`
   position: fixed;
   top: 0;
@@ -61,7 +184,7 @@ const InputField = styled.input`
   }
 `;
 
-const TextInput = styled.textarea`
+const TextArea = styled.textarea`
   width: 100%;
   height: 120px;
   padding: 12px;
@@ -69,6 +192,7 @@ const TextInput = styled.textarea`
   border: 2px solid #ddd;
   font-size: 16px;
   transition: all 0.3s ease;
+  background: #f9f9f9;
   &:focus {
     border-color: #6C63FF;
     box-shadow: 0 0 8px rgba(108, 99, 255, 0.3);
@@ -96,35 +220,6 @@ const RecordButton = styled.button`
   }
 `;
 
-const ImageUploadBox = styled.div`
-  margin-top: 15px;
-`;
-
-const ImagePreview = styled.img`
-  width: 100px;
-  height: 100px;
-  border-radius: 10px;
-  object-fit: cover;
-  border: 2px solid #ddd;
-`;
-
-const UploadPlaceholder = styled.label`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 120px;
-  height: 120px;
-  border: 2px dashed #ccc;
-  border-radius: 10px;
-  cursor: pointer;
-  font-size: 18px;
-  transition: all 0.3s ease;
-  &:hover {
-    border-color: #6C63FF;
-    background: rgba(108, 99, 255, 0.1);
-  }
-`;
-
 const SaveButton = styled.button`
   width: 100%;
   margin-top: 20px;
@@ -143,114 +238,49 @@ const SaveButton = styled.button`
   }
 `;
 
-const InputNoteModal = ({ isOpen, onClose, inputType, addNewNote }) => {
-  const [newNote, setNewNote] = useState({
-    title: "",
-    text: "",
-    audioUrl: "",
-    image: "",
-  });
+const ImageUploadSection = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  border: 2px dashed #ccc;
+  border-radius: 8px;
+  cursor: pointer;
+`;
 
-  const [recording, setRecording] = useState(false);
-  const [audioBlob, setAudioBlob] = useState(null);
+const UploadIcon = styled(AiOutlineCloudUpload)`
+  font-size: 40px;
+  color: #4F46E5;
+  margin-bottom: 5px;
+`;
 
-  if (!isOpen) return null;
+const UploadedImage = styled.img`
+  width: 100px;
+  height: 100px;
+  object-fit: cover;
+  border-radius: 8px;
+  margin-top: 10px;
+`;
 
-  const handleTitleChange = (e) => {
-    setNewNote({ ...newNote, title: e.target.value });
-  };
+const TranscriptInput = styled.textarea`
+  width: 100%;
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  font-size: 14px;
+  transition: all 0.3s ease;
+  &:focus {
+    border-color: #6C63FF;
+    box-shadow: 0 0 8px rgba(108, 99, 255, 0.3);
+    outline: none;
+  }
+`;
 
-  const handleTextChange = (e) => {
-    setNewNote({ ...newNote, text: e.target.value });
-  };
-
-  const handleImageUpload = (e) => {
-    if (e.target.files[0]) {
-      setNewNote({ ...newNote, image: URL.createObjectURL(e.target.files[0]) });
-    }
-  };
-
-  const handleAudioRecord = () => {
-    setRecording(!recording);
-    if (!recording) {
-      const newBlob = new Blob(["dummy audio data"], { type: "audio/mp3" });
-      setAudioBlob(newBlob);
-      setNewNote({ ...newNote, audioUrl: URL.createObjectURL(newBlob) });
-    }
-  };
-
-  const handleSaveNote = async () => {
-    const token = localStorage.getItem("token");
-
-    if (!token) {
-      alert("You must be logged in to save a note.");
-      return;
-    }
-
-    if (!newNote.title.trim()) {
-      alert("Title is required.");
-      return;
-    }
-
-    try {
-      const response = await fetch("http://localhost:5000/api/notes", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-        },
-        body: JSON.stringify(newNote),
-      });
-
-      const data = await response.json();
-      console.log("Server Response:", data);
-
-      if (response.ok) {
-        addNewNote(data);
-        onClose();
-      } else {
-        alert(`Failed to save note: ${data.message}`);
-      }
-    } catch (error) {
-      console.error("Error saving note:", error);
-    }
-  };
-
-  return (
-    <ModalOverlay>
-      <ModalContent>
-        <CloseButton onClick={onClose}>×</CloseButton>
-        <Title>
-          {inputType === "text"
-            ? "Enter Your Note ✏️"
-            : inputType === "audio"
-            ? "Record Your Audio 🎙"
-            : "Upload an Image 🖼"}
-        </Title>
-
-        {inputType === "text" && (
-          <>
-            <InputField type="text" placeholder="Enter title..." value={newNote.title} onChange={handleTitleChange} />
-            <TextInput placeholder="Type your note..." value={newNote.text} onChange={handleTextChange} />
-          </>
-        )}
-
-        {inputType === "audio" && (
-          <RecordButton onClick={handleAudioRecord} recording={recording}>
-            {recording ? "Stop Recording" : "Start Recording"} <BsMicFill />
-          </RecordButton>
-        )}
-
-        {inputType === "image" && (
-          <ImageUploadBox>
-            {newNote.image ? <ImagePreview src={newNote.image} alt="Uploaded" /> : <UploadPlaceholder>+</UploadPlaceholder>}
-          </ImageUploadBox>
-        )}
-
-        <SaveButton onClick={handleSaveNote}>Save Note</SaveButton>
-      </ModalContent>
-    </ModalOverlay>
-  );
-};
-
-export default InputNoteModal;
+const TranscriptText = styled.p`
+  font-size: 13px;
+  color: #444;
+  background: #f8f8f8;
+  padding: 8px;
+  border-radius: 6px;
+`;
