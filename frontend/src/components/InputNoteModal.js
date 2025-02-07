@@ -46,6 +46,21 @@ const Title = styled.h2`
   margin-bottom: 10px;
 `;
 
+const InputField = styled.input`
+  width: 100%;
+  padding: 12px;
+  border-radius: 8px;
+  border: 2px solid #ddd;
+  font-size: 16px;
+  margin-bottom: 10px;
+  transition: all 0.3s ease;
+  &:focus {
+    border-color: #6C63FF;
+    box-shadow: 0 0 8px rgba(108, 99, 255, 0.3);
+    outline: none;
+  }
+`;
+
 const TextInput = styled.textarea`
   width: 100%;
   height: 120px;
@@ -141,6 +156,10 @@ const InputNoteModal = ({ isOpen, onClose, inputType, addNewNote }) => {
 
   if (!isOpen) return null;
 
+  const handleTitleChange = (e) => {
+    setNewNote({ ...newNote, title: e.target.value });
+  };
+
   const handleTextChange = (e) => {
     setNewNote({ ...newNote, text: e.target.value });
   };
@@ -161,46 +180,60 @@ const InputNoteModal = ({ isOpen, onClose, inputType, addNewNote }) => {
   };
 
   const handleSaveNote = async () => {
-    const token = localStorage.getItem("token"); // Retrieve stored JWT token
-  
+    const token = localStorage.getItem("token");
+
     if (!token) {
       alert("You must be logged in to save a note.");
       return;
     }
-  
-    if (newNote.text || newNote.audioUrl || newNote.image) {
-      try {
-        const response = await fetch("http://localhost:5000/api/notes", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`, // Send token in headers
-          },
-          body: JSON.stringify(newNote),
-        });
-  
-        const data = await response.json();
-        console.log("Server Response:", data);
-  
-        if (response.ok) {
-          addNewNote(data);
-          onClose();
-        } else {
-          alert(`Failed to save note: ${data.message}`);
-        }
-      } catch (error) {
-        console.error("Error saving note:", error);
-      }
+
+    if (!newNote.title.trim()) {
+      alert("Title is required.");
+      return;
     }
-  };  
-  
+
+    try {
+      const response = await fetch("http://localhost:5000/api/notes", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify(newNote),
+      });
+
+      const data = await response.json();
+      console.log("Server Response:", data);
+
+      if (response.ok) {
+        addNewNote(data);
+        onClose();
+      } else {
+        alert(`Failed to save note: ${data.message}`);
+      }
+    } catch (error) {
+      console.error("Error saving note:", error);
+    }
+  };
+
   return (
     <ModalOverlay>
       <ModalContent>
         <CloseButton onClick={onClose}>×</CloseButton>
-        <Title>{inputType === "text" ? "Enter Your Note ✏️" : inputType === "audio" ? "Record Your Audio 🎙" : "Upload an Image 🖼"}</Title>
+        <Title>
+          {inputType === "text"
+            ? "Enter Your Note ✏️"
+            : inputType === "audio"
+            ? "Record Your Audio 🎙"
+            : "Upload an Image 🖼"}
+        </Title>
 
-        {inputType === "text" && <TextInput placeholder="Type your note..." value={newNote.text} onChange={handleTextChange} />}
+        {inputType === "text" && (
+          <>
+            <InputField type="text" placeholder="Enter title..." value={newNote.title} onChange={handleTitleChange} />
+            <TextInput placeholder="Type your note..." value={newNote.text} onChange={handleTextChange} />
+          </>
+        )}
 
         {inputType === "audio" && (
           <RecordButton onClick={handleAudioRecord} recording={recording}>
