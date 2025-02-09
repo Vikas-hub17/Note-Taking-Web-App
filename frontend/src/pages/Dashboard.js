@@ -290,7 +290,7 @@ return (
           note.id === noteId ? { ...note, favorite: !note.favorite } : note
         )
       );
-    }} // ✅ Toggles favorite status in Dashboard
+    }}
   />
 )}
       </MainContent>
