@@ -1,14 +1,18 @@
 import React, { useState, useEffect } from "react";
 import styled from "styled-components";
-import { FaSearch, FaRegCopy } from "react-icons/fa";
-import { MdSort, MdDelete, MdEdit } from "react-icons/md";
-import { BsMicFill, BsThreeDots, BsMicMute } from "react-icons/bs";
-import { AiFillHome, AiOutlineStar, AiOutlinePicture, AiOutlineEdit } from "react-icons/ai";
+import { FaSearch, } from "react-icons/fa";
+import { MdSort, } from "react-icons/md";
+import { BsMicFill, BsMicMute } from "react-icons/bs";
+import { AiFillHome,AiOutlineUser, AiOutlineStar, AiOutlineCopy, AiOutlineEdit, AiOutlineDelete, AiOutlinePicture } from "react-icons/ai";
 import NoteModal from "../components/NoteModal";
 import InputNoteModal from "../components/InputNoteModal";
 import { useSpeechRecognition } from "../hooks/useSpeechRecognition"; // Import speech recognition hook
+import Profile from "../pages/Profile";
+import { FaChevronUp, FaChevronDown } from "react-icons/fa";
 
 const Dashboard = () => {
+  const [isFloatingBarVisible, setIsFloatingBarVisible] = useState(false);
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
   const { transcript, isRecording, startRecording, stopRecording } = useSpeechRecognition(); // Use speech recognition
   const [selectedNote, setSelectedNote] = useState(null);
   const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
@@ -17,8 +21,9 @@ const Dashboard = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [newNote, setNewNote] = useState({ title: "", content: "" });
   const [inputType, setInputType] = useState("");
-  const [isFavoriteView, setIsFavoriteView] = useState(false);
-  
+  const [activePage, setActivePage] = useState("home");
+  const [username, setUsername] = useState("Vikas");
+ 
   const [notes, setNotes] = useState([
     {
       id: 1,
@@ -38,7 +43,18 @@ const Dashboard = () => {
     },
   ]);
 
-  const [displayedNotes, setDisplayedNotes] = useState(notes);
+  const displayedNotes = notes.filter((note) => {
+    if (activePage === "favorites") return note.favorite; // ✅ Show only favorited notes
+    return true; // ✅ Show all notes for "Home" or "Profile"
+  });
+
+  const handleNavigation = (page) => {
+    setActivePage(page); // ✅ Updates the active page
+  };
+
+  const handleSaveChanges = () => {
+    alert("Profile updated successfully! (In real app, update MongoDB)");
+  };
 
   useEffect(() => {
     if (!isRecording && transcript) {
@@ -49,10 +65,6 @@ const Dashboard = () => {
       }
     }
   }, [isRecording, transcript]);
-
-  useEffect(() => {
-    setDisplayedNotes(isFavoriteView ? notes.filter((note) => note.favorite) : notes);
-  }, [isFavoriteView, notes]);  
   
   const deleteNote = (noteId) => {
     setNotes((prevNotes) => prevNotes.filter((note) => note.id !== noteId));
@@ -62,6 +74,30 @@ const Dashboard = () => {
     setNotes((prevNotes) =>
       prevNotes.map((note) => (note.id === updatedNote.id ? updatedNote : note))
     );
+  };
+
+  const handleCopy = (e, content) => {
+    e.stopPropagation(); // Prevent modal from opening
+    navigator.clipboard.writeText(content);
+    alert("Note copied!");
+  };
+
+  const handleEdit = (e, note) => {
+    e.stopPropagation(); // Prevent modal from opening
+    const newTitle = prompt("Edit note title:", note.title);
+    if (newTitle) {
+      setNotes((prevNotes) =>
+        prevNotes.map((n) => (n.id === note.id ? { ...n, title: newTitle } : n))
+      );
+    }
+  };
+
+  const handleDelete = (e, noteId) => {
+    e.stopPropagation(); // Prevent modal from opening
+    const confirmDelete = window.confirm("Are you sure you want to delete this note?");
+    if (confirmDelete) {
+      setNotes((prevNotes) => prevNotes.filter((note) => note.id !== noteId));
+    }
   };
 
   const openInputModal = (type) => {
@@ -111,33 +147,53 @@ return (
       <Sidebar>
         <Brand>AI Notes</Brand>
         <Menu>
-          <MenuItem active={!isFavoriteView} onClick={() => setIsFavoriteView(false)}>
+          <MenuItem active={activePage === "home"} onClick={() => handleNavigation("home")}>
             <AiFillHome />
             Home
           </MenuItem>
-          <MenuItem active={isFavoriteView} onClick={() => setIsFavoriteView(true)}>
+          <MenuItem active={activePage === "favorites"} onClick={() => handleNavigation("favorites")}>
             <AiOutlineStar />
             Favorites
           </MenuItem>
+          <MenuItem active={activePage === "profile"} onClick={() => setActivePage("profile")}>
+            <AiOutlineUser />
+            Profile
+          </MenuItem>
         </Menu>
-        <UserSection>
-          <UserIcon>E</UserIcon>
-          <UserName>Emmanual Vincent</UserName>
-        </UserSection>
+        <UserProfile>
+          <ProfilePic>
+            {username.charAt(0)}
+          </ProfilePic>
+          <Username>{username}</Username>
+        </UserProfile>
       </Sidebar>
 
       {/* Main Content */}
       <MainContent>
-        <Header>
-        {isFavoriteView ? "Favorite Notes" : "All Notes"}
-          <SearchBar>
-            <FaSearch />
-            <input type="text" placeholder="Search" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
-          </SearchBar>
-          <SortButton>
-            <MdSort /> Sort
-          </SortButton>
-        </Header>
+      {activePage === "profile" ? (
+            <Profile setUsername={setUsername} />  // ✅ Render Profile page when "Profile" is clicked
+        ) : (
+          <>
+            {/* ✅ Notes & Favorites Page */}
+            <Header>
+              {activePage === "favorites" ? "Favorite Notes" : "All Notes"}
+              <SearchBar focused={isSearchFocused}>
+  <SearchIcon>
+    <FaSearch />
+  </SearchIcon>
+  <SearchInput
+    type="text"
+    placeholder="Search notes..."
+    onFocus={() => setIsSearchFocused(true)}
+    onBlur={() => setIsSearchFocused(false)}
+    value={searchQuery}
+    onChange={(e) => setSearchQuery(e.target.value)}
+  />
+</SearchBar>
+           <SortButton>
+                <MdSort /> Sort
+              </SortButton>
+            </Header>
 
         {/* Notes Grid */}
         <NotesGrid>
@@ -159,17 +215,22 @@ return (
                 {note.hasImage && <NoteFooter><AiOutlinePicture /> 1 Image</NoteFooter>}
 
                 <Actions>
-                  <ActionButton><FaRegCopy /></ActionButton>
-                  <ActionButton><MdEdit /></ActionButton>
-                  <ActionButton><MdDelete /></ActionButton>
-                  <BsThreeDots />
+                  <ActionButton onClick={(e) => handleCopy(e, note.content)}>
+                    <AiOutlineCopy />
+                  </ActionButton>
+                  <ActionButton onClick={(e) => handleEdit(e, note)}>
+                    <AiOutlineEdit />
+                  </ActionButton>
+                  <ActionButton onClick={(e) => handleDelete(e, note.id)}>
+                    <AiOutlineDelete />
+                  </ActionButton>
                 </Actions>
               </NoteCard>
             ))}
         </NotesGrid>
-
-        {/* Floating Bottom Bar */}
-        <FloatingBar>
+        </>
+      )}  
+        <FloatingBar visible={isFloatingBarVisible}>
           <LeftIcons>
             <FloatingIcon onClick={() => openInputModal("image")}>
               <AiOutlinePicture />
@@ -185,32 +246,53 @@ return (
         </RecordButton>
         </FloatingBar>
 
-        {/* Input Modal */}
-        {isInputModalOpen && (
-          <InputNoteModal
-            isOpen={isInputModalOpen}
-            onClose={() => setIsInputModalOpen(false)}
-            inputType={modalType}
-          transcript={transcript}
-          isRecording={isRecording}
-          startRecording={startRecording}
-          stopRecording={stopRecording}
-          newNote={newNote}
-          setNewNote={setNewNote}
-          />
-        )}
+        {/* Arrow Button to Toggle Floating Bar */}
+      <ArrowButton onClick={() => setIsFloatingBarVisible(!isFloatingBarVisible)}>
+        {isFloatingBarVisible ? <FaChevronDown /> : <FaChevronUp />}
+      </ArrowButton>
 
-        {/* Note Modal */}
-        {isNoteModalOpen && selectedNote && (
-          <NoteModal
-          updateNote={updateNote}  // ✅ Pass update function
-          deleteNote={deleteNote}  // ✅ Pass delete function
-            isOpen={isNoteModalOpen}
-            onClose={() => setIsNoteModalOpen(false)}
-            note={selectedNote}
-            toggleFavorite={toggleFavorite}  
-          />
-        )}
+        {/* Input Modal */}
+{isInputModalOpen && (
+  <InputNoteModal
+    isOpen={isInputModalOpen}
+    onClose={() => setIsInputModalOpen(false)}
+    inputType={modalType}
+    addNewNote={(note) => setNotes((prevNotes) => [...prevNotes, note])} // ✅ Updates Dashboard
+    setNotes={setNotes}
+    transcript={transcript}
+    isRecording={isRecording}
+    startRecording={startRecording}
+    stopRecording={stopRecording}
+  />
+)}
+
+{isNoteModalOpen && selectedNote && (
+  <NoteModal
+    updateNote={(updatedNote) => {
+      setNotes((prevNotes) =>
+        prevNotes.map((note) =>
+          note.id === updatedNote.id ? updatedNote : note
+        )
+      );
+    }}  // ✅ Updates the edited note in Dashboard
+
+    deleteNote={(noteId) => {
+      setNotes((prevNotes) => prevNotes.filter((note) => note.id !== noteId));
+      setIsNoteModalOpen(false);
+    }}  // ✅ Removes deleted note from Dashboard
+
+    isOpen={isNoteModalOpen}
+    onClose={() => setIsNoteModalOpen(false)}
+    note={selectedNote}
+    toggleFavorite={(noteId) => {
+      setNotes((prevNotes) =>
+        prevNotes.map((note) =>
+          note.id === noteId ? { ...note, favorite: !note.favorite } : note
+        )
+      );
+    }} // ✅ Toggles favorite status in Dashboard
+  />
+)}
       </MainContent>
     </Container>
   );
@@ -227,24 +309,29 @@ const Container = styled.div`
 
 const Sidebar = styled.div`
   width: 250px;
-  background: #fff;
+  background: #f4f4f4;
   padding: 20px;
-  box-shadow: 2px 0px 5px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
 `;
 
 const FloatingBar = styled.div`
   position: fixed;
-  bottom: 20px;
-  left: 60%;
+  bottom: ${(props) => (props.visible ? "20px" : "-80px")}; /* Smooth slide up/down */
+  left: 50%;
   transform: translateX(-50%);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  width: 800px;
-  background: white;
+  width: 750px;
+  background: rgba(255, 255, 255, 0.95);
   padding: 12px 20px;
   border-radius: 30px;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+  transition: bottom 0.4s ease-in-out, opacity 0.3s ease-in-out;
+  opacity: ${(props) => (props.visible ? "1" : "0")};
+  visibility: ${(props) => (props.visible ? "visible" : "hidden")};
 `;
 
 const LeftIcons = styled.div`
@@ -296,29 +383,6 @@ const MenuItem = styled.div`
   background: ${(props) => (props.active ? "#E7D7FF" : "transparent")};
 `;
 
-/* User Section */
-const UserSection = styled.div`
-  display: flex;
-  align-items: center;
-  padding: 10px 0;
-`;
-
-const UserIcon = styled.div`
-  background: black;
-  color: white;
-  width: 35px;
-  height: 35px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: bold;
-`;
-
-const UserName = styled.span`
-  margin-left: 10px;
-`;
-
 /* Main Content */
 const MainContent = styled.div`
   flex: 1;
@@ -335,11 +399,16 @@ const Header = styled.div`
 const SearchBar = styled.div`
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px;
-  border-radius: 10px;
   background: #f1f1f1;
-  width: 60%;
+  padding: 12px 16px;
+  border-radius: 25px;
+  width: ${(props) => (props.focused ? "350px" : "280px")};  /* Expand when focused */
+  transition: all 0.3s ease-in-out;
+  box-shadow: ${(props) => (props.focused ? "0 4px 10px rgba(0, 0, 0, 0.15)" : "none")};
+
+  &:hover {
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.1);
+  }
 `;
 
 const SortButton = styled.button`
@@ -426,6 +495,13 @@ const Actions = styled.div`
   margin-top: 10px;
 `;
 
+const Username = styled.div`
+  font-size: 18px;
+  font-weight: bold;
+  color: #333;
+  margin-top: 20px;
+`;
+
 const ActionButton = styled.button`
   background: none;
   border: none;
@@ -437,4 +513,73 @@ const ActionButton = styled.button`
     color: black;
     transform: scale(1.1);
   }
+`;
+
+const UserProfile = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: auto;
+`;
+
+const ProfilePic = styled.div`
+  width: 40px;
+  height: 40px;
+  background: #007bff;
+  color: white;
+  font-size: 20px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+`;
+
+const ArrowButton = styled.button`
+  position: fixed;
+  bottom: ${(props) => (props.visible ? "110px" : "20px")}; /* Half Hidden Initially */
+  left: 90%;
+  transform: translateX(-50%);
+  background: ${(props) => (props.visible ? "#6C63FF" : "#4CAF50")};
+  color: white;
+  border: none;
+  padding: 12px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 15px;
+  transition: bottom 0.4s ease-in-out, background 0.3s ease-in-out, transform 0.2s ease-in-out;
+  box-shadow: 0 6px 15px rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover {
+    background: ${(props) => (props.visible ? "#554CC8" : "#388E3C")};
+    transform: translateX(-50%) scale(1.1);
+  }
+
+  &:active {
+    transform: translateX(-50%) scale(0.95);
+  }
+`;
+
+const SearchInput = styled.input`
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-size: 16px;
+  color: #333;
+  outline: none;
+  padding-left: 8px;
+  transition: width 0.3s ease-in-out;
+
+  &::placeholder {
+    color: #888;
+  }
+`;
+
+const SearchIcon = styled.div`
+  font-size: 18px;
+  color: #555;
+  transition: all 0.3s ease-in-out;
 `;

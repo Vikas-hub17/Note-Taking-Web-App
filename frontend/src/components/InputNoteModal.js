@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from "react";
 import styled from "styled-components";
 import { BsMicFill, BsMicMute } from "react-icons/bs";
-import { AiOutlineClose, AiOutlineCloudUpload  } from "react-icons/ai";
+import { AiOutlineClose, AiOutlineCloudUpload, AiOutlineCheckCircle } from "react-icons/ai";
 import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
 
-const InputNoteModal = ({ isOpen, onClose, inputType, addNewNote, note }) => {
+const InputNoteModal = ({ isOpen, onClose, inputType, addNewNote, note, setNotes }) => {
   const { transcript, isRecording, startRecording, stopRecording } = useSpeechRecognition();
   const [newNote, setNewNote] = useState({ title: "", text: "", audioUrl: "" });
   const [editableNote, setEditableNote] = useState({ ...note });
   const [isEditing, setIsEditing] = useState(false);
+  const [audioBlob, setAudioBlob] = useState(null);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
 
   useEffect(() => {
     if (!isRecording && transcript && inputType === "audio") {
@@ -17,10 +20,10 @@ const InputNoteModal = ({ isOpen, onClose, inputType, addNewNote, note }) => {
   }, [isRecording, transcript, inputType]);
 
   useEffect(() => {
-      if (transcript) {
-        setEditableNote((prev) => ({ ...prev, transcription: transcript }));
-      }
-    }, [transcript]);
+    if (transcript) {
+      setEditableNote((prev) => ({ ...prev, transcription: transcript }));
+    }
+  }, [transcript]);
 
   if (!isOpen) return null;
 
@@ -29,7 +32,7 @@ const InputNoteModal = ({ isOpen, onClose, inputType, addNewNote, note }) => {
   const handleChange = (e, field) => {
     setEditableNote({ ...editableNote, [field]: e.target.value });
   };
-  
+
   const handleContentChange = (e) => setNewNote({ ...newNote, content: e.target.value });
 
   const handleImageUpload = (e) => {
@@ -41,42 +44,102 @@ const InputNoteModal = ({ isOpen, onClose, inputType, addNewNote, note }) => {
 
   const handleSaveNote = async () => {
     const token = localStorage.getItem("token");
-
+  
     if (!token) {
       alert("You must be logged in to save a note.");
       return;
     }
-
+  
     if (!newNote.title.trim()) {
       alert("Title is required.");
       return;
     }
-
+  
+    if (showSuccess) return; // Prevents duplicate saves
+  
     try {
+      setShowSuccess(true);
+  
+      const newNoteObj = {
+        id: Date.now(), // Unique ID for frontend
+        type: inputType,
+        title: newNote.title,
+        text: newNote.content, 
+        timestamp: new Date().toLocaleString(),
+        duration: inputType === "audio" ? "00:00" : null,
+        image: newNote.image || "",
+      };
+
       const response = await fetch("http://localhost:5000/api/notes", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(newNote),
+        body: JSON.stringify(newNoteObj),
       });
 
       const data = await response.json();
+
       if (response.ok) {
-        addNewNote(data);
-        onClose();
+        // ✅ Add the note to dashboard only after successful DB save
+        setNotes((prevNotes) => [...prevNotes, data]);
+
+        setShowSuccess(true);
+        setTimeout(() => {
+          setShowSuccess(false);
+          onClose();
+        }, 2000);
       } else {
         alert(`Failed to save note: ${data.message}`);
       }
+
+      setNewNote({ title: "", text: "", image: "" });
     } catch (error) {
       console.error("Error saving note:", error);
+    }
+  };
+  
+  const handleStartRecording = async () => {
+    try {
+      await startRecording();
+      setNewNote(prev => ({ ...prev, audioUrl: "" }));
+    } catch (error) {
+      console.error("Error starting recording:", error);
+      alert("Could not start recording. Please check your microphone permissions.");
+    }
+  };
+
+  const handleStopRecording = async () => {
+    try {
+      const blob = await stopRecording();
+      setAudioBlob(blob);
+      setIsTranscribing(true);
+
+      // Create temporary URL for the audio
+      const audioUrl = URL.createObjectURL(blob);
+      setNewNote(prev => ({ ...prev, audioUrl }));
+
+      // Wait for transcript before updating content
+      if (transcript) {
+        setNewNote(prev => ({ ...prev, content: transcript }));
+      }
+
+      setIsTranscribing(false);
+    } catch (error) {
+      console.error("Error stopping recording:", error);
+      setIsTranscribing(false);
     }
   };
 
   return (
     <ModalOverlay>
       <ModalContent>
+      {showSuccess && (
+          <SuccessMessage>
+            <AiOutlineCheckCircle /> Note saved successfully!
+          </SuccessMessage>
+        )}
         <CloseButton onClick={onClose}>
           <AiOutlineClose />
         </CloseButton>
@@ -110,8 +173,29 @@ const InputNoteModal = ({ isOpen, onClose, inputType, addNewNote, note }) => {
             ) : (
               <TranscriptText>{editableNote.transcription}</TranscriptText>
             )}
-            <RecordButton onClick={isRecording ? stopRecording : startRecording} recording={isRecording}>
-              {isRecording ? "Stop Recording" : "Start Recording"} {isRecording ? <BsMicMute /> : <BsMicFill />}
+            <RecordButton 
+              onClick={() => {
+                if (isRecording) {
+                  handleStopRecording();
+                } else {
+                  handleStartRecording();
+                }
+              }} 
+              recording={isRecording}
+              disabled={isTranscribing}
+              type="button" // Add this to prevent form submission
+            >
+              {isRecording ? (
+                <>
+                  <BsMicMute /> Stop Recording
+                </>
+              ) : isTranscribing ? (
+                "Transcribing..."
+              ) : (
+                <>
+                  <BsMicFill /> Start Recording
+                </>
+              )}
             </RecordButton>
           </>
         )}
@@ -283,4 +367,17 @@ const TranscriptText = styled.p`
   background: #f8f8f8;
   padding: 8px;
   border-radius: 6px;
+`;
+
+const SuccessMessage = styled.div`
+  position: absolute;
+  top: -20px;
+  background: #28a745;
+  color: white;
+  padding: 10px;
+  border-radius: 8px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
 `;

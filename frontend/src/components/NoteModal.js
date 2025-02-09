@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import styled from "styled-components";
-import {useSpeechRecognition} from "../hooks/useSpeechRecognition";
+import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
 import { FiX, FiMaximize2, FiStar, FiDownload, FiTrash2, FiSettings, FiEdit } from "react-icons/fi";
 import { BsShare, BsMic, BsMicMute, BsPlus } from "react-icons/bs";
 
@@ -9,11 +9,10 @@ const NoteModal = ({ note, onClose, updateNote, deleteNote, toggleFavorite }) =>
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [editableNote, setEditableNote] = useState({ ...note });
   const [isEditing, setIsEditing] = useState(false);
-  const { transcript, isRecording, startRecording, stopRecording } = useSpeechRecognition();  // Use hook
-  const [selectedNote] = useState(null);
-  const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
-  const [setIsModalOpen] = useState(false);
-
+  const { transcript, isRecording, startRecording, stopRecording } = useSpeechRecognition();
+  const [image, setImage] = useState(note.image || null);
+  const [message, setMessage] = useState("");
+  const [messageType, setMessageType] = useState(""); // "success" or "error"
 
   const handleChange = (e, field) => {
     setEditableNote({ ...editableNote, [field]: e.target.value });
@@ -34,25 +33,25 @@ const NoteModal = ({ note, onClose, updateNote, deleteNote, toggleFavorite }) =>
     }
   }, [transcript]);
 
-// Handle saving note updates
-const handleSave = () => {
-  if (!editableNote.title.trim()) {
-    alert("Title is required.");
-    return;
-  }
-  updateNote(editableNote);
-  setIsEditing(false);
-};
+  // Handle saving note updates
+  const handleSave = () => {
+    if (!editableNote.title.trim()) {
+      alert("Title is required.");
+      return;
+    }
+    updateNote(editableNote);
+    setIsEditing(false);
+  };
 
-// Handle image upload (allows multiple images)
-const handleImageUpload = (e) => {
-  const files = Array.from(e.target.files);
-  const newImages = files.map((file) => URL.createObjectURL(file));
-  setEditableNote((prev) => ({
-    ...prev,
-    images: [...(prev.images || []), ...newImages],
-  }));
-};
+  // Handle image upload (allows multiple images)
+  const handleImageUpload = (e) => {
+    const files = Array.from(e.target.files);
+    const newImages = files.map((file) => URL.createObjectURL(file));
+    setEditableNote((prev) => ({
+      ...prev,
+      images: [...(prev.images || []), ...newImages],
+    }));
+  };
 
   // Handle deleting a specific image
   const handleImageRemove = (index) => {
@@ -65,29 +64,39 @@ const handleImageUpload = (e) => {
   // Handle favorite toggle
   const handleFavorite = () => {
     setIsFavorite(!isFavorite);
-    toggleFavorite(note.id);  // ✅ Now using the function properly
+    toggleFavorite(note.id);
   };
 
   // Handle delete note
-  const handleDelete = () => {
+  const handleDelete = async () => {
     const confirmDelete = window.confirm("Are you sure you want to delete this note?");
     if (confirmDelete) {
-      deleteNote(editableNote.id);  // ✅ Call delete function
-      onClose();
+      try {
+        const token = localStorage.getItem("token");
+        const response = await fetch(`http://localhost:5000/api/notes/${editableNote.id}`, {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+  
+        if (response.ok) {
+          deleteNote(editableNote.id);
+          setMessage("Note deleted successfully.");
+          setMessageType("success");
+          onClose();
+        } else {
+          const data = await response.json();
+          setMessage(`Failed to delete note: ${data.message}`);
+          setMessageType("error");
+        }
+      } catch (error) {
+        console.error("Error deleting note:", error);
+        setMessage("An error occurred while deleting the note.");
+        setMessageType("error");
+      }
     }
   };
-
-
-{isNoteModalOpen && (
-  <NoteModal 
-    note={selectedNote} 
-    isOpen={isNoteModalOpen} 
-    onClose={() => setIsNoteModalOpen(false)}
-    updateNote={updateNote}
-    deleteNote={deleteNote}
-    toggleFavorite={toggleFavorite}
-  />
-)}
 
   return (
     <ModalOverlay>
@@ -98,9 +107,9 @@ const handleImageUpload = (e) => {
             <FiMaximize2 />
           </IconButton>
           {isEditing ? (
-            <TitleInput 
-              type="text" 
-              value={editableNote.title} 
+            <TitleInput
+              type="text"
+              value={editableNote.title}
               onChange={(e) => setEditableNote({ ...editableNote, title: e.target.value })}
             />
           ) : (
@@ -108,9 +117,9 @@ const handleImageUpload = (e) => {
           )}
           <Date>{editableNote.date}</Date>
           <HeaderRight>
-          <IconButton onClick={handleFavorite}>
-            <FiStar color={isFavorite ? "#FFD700" : "#999"} />
-          </IconButton>
+            <IconButton onClick={handleFavorite}>
+              <FiStar color={isFavorite ? "#FFD700" : "#999"} />
+            </IconButton>
             <IconButton>
               <FiSettings />
             </IconButton>
@@ -126,6 +135,13 @@ const handleImageUpload = (e) => {
             </CloseButton>
           </HeaderRight>
         </ModalHeader>
+
+        {/* Display message */}
+        {message && (
+          <Message type={messageType}>
+            {message}
+          </Message>
+        )}
 
         {/* Audio Player */}
         {editableNote.audio && (
@@ -153,8 +169,8 @@ const handleImageUpload = (e) => {
           <TranscriptSection>
             <TranscriptTitle>Transcript</TranscriptTitle>
             {isEditing ? (
-              <TranscriptInput 
-                value={editableNote.transcription} 
+              <TranscriptInput
+                value={editableNote.transcription}
                 onChange={(e) => handleChange(e, "transcription")}
               />
             ) : (
@@ -164,8 +180,8 @@ const handleImageUpload = (e) => {
           </TranscriptSection>
         </Content>
 
-       {/* Image Upload Section */}
-       <ImageUploadSection>
+        {/* Image Upload Section */}
+        <ImageUploadSection>
           <label htmlFor="imageUpload">
             <UploadBox>
               <BsPlus />
@@ -186,12 +202,11 @@ const handleImageUpload = (e) => {
         </ImageUploadSection>
 
         <RecordingSection>
-  <RecordButton onClick={isRecording ? stopRecording : startRecording}>
-    {isRecording ? <BsMicMute /> : <BsMic />}
-    {isRecording ? "Stop Recording" : "Start Recording"}
-  </RecordButton>
-</RecordingSection>
-
+          <RecordButton onClick={isRecording ? stopRecording : startRecording}>
+            {isRecording ? <BsMicMute /> : <BsMic />}
+            {isRecording ? "Stop Recording" : "Start Recording"}
+          </RecordButton>
+        </RecordingSection>
 
         {/* Footer Actions */}
         <FooterActions>
@@ -219,15 +234,6 @@ const ModalOverlay = styled.div`
   display: flex;
   justify-content: center;
   align-items: center;
-`;
-
-const RemoveImageButton = styled.button`
-  margin-top: 8px;
-  background: #e74c3c;
-  color: white;
-  padding: 5px 10px;
-  border: none;
-  cursor: pointer;
 `;
 
 const ModalContainer = styled.div`
@@ -340,7 +346,6 @@ const SaveButton = styled.button`
   cursor: pointer;
 `;
 
-/* Styled Components */
 const IconButton = styled.button`
   background: none;
   border: none;
@@ -503,3 +508,27 @@ const ImageWrapper = styled.div`
   position: relative;
 `;
 
+const RemoveImageButton = styled.button`
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  background: #e74c3c;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+`;
+
+const Message = styled.div`
+  padding: 10px;
+  margin: 10px 0;
+  border-radius: 6px;
+  color: white;
+  background-color: ${(props) => (props.type === "success" ? "#4CAF50" : "#f44336")};
+  text-align: center;
+`;
